@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "quickjs-emscripten": "^0.20.0"
+  },
+  "devDependencies": {
+    "browserify": "^17.0.0",
+    "esbuild": "^0.14.39"
+  },
+  "scripts": {
+    "build": "npx browserify quickjs.js --standalone quickjs > quickjs-browserify.js && npx esbuild quickjs-browserify.js --format=esm --minify > quickjs-module.js"
+  }
+}
