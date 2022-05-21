@@ -1,4 +1,4 @@
-// deno test --allow-net test.js --watch
+// deno test -A test.js --watch
 
 import {
   assertEquals,
@@ -153,7 +153,6 @@ Deno.test("basics", async () => {
     ]
   );
 
-  threw = false;
   assertEquals(
     await execInSandbox(
       `
@@ -169,5 +168,35 @@ Deno.test("basics", async () => {
       }
     ),
     "foo"
+  );
+});
+
+Deno.test("file reference", async () => {
+  const url = new URL("./fixtures/simple-module.js", import.meta.url).toString();
+  const script = `
+  import foo from "${url}"
+  export default function() {
+    return foo;
+  }
+  `;
+
+  let threw = false;
+  try {
+    await execInSandbox(script);
+  } catch (e) {
+    threw = true;
+  }
+  assert(threw, "file system loading without config should throw");
+
+  assertEquals(
+    await execInSandbox(`
+    import foo from "${url}"
+    export default function() {
+      return foo;
+    }
+    `, {
+      allowFileModuleLoads: true,
+    }),
+    40
   );
 });

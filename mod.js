@@ -26,16 +26,14 @@ function parseScript(script) {
   throw new Error("Unable to parse script");
 }
 
-function isValidHttpUrl(string, base) {
+function getURL(string, base) {
   let url;
 
   try {
     url = new URL(string, base);
-  } catch (_) {
-    return false;
-  }
+  } catch (_) {}
 
-  return url.protocol === "http:" || url.protocol === "https:";
+  return url;
 }
 
 async function getNewContextWithGlobals({
@@ -43,8 +41,24 @@ async function getNewContextWithGlobals({
   importMap,
   verbose,
   allowRemoteModuleLoads,
+  allowFileModuleLoads,
   isModule,
 }) {
+  function getValidImportURL(string, base) {
+    let url = getURL(string, base);
+    if (!url) {
+      return false;
+    }
+
+    if (
+      url.protocol === "http:" ||
+      url.protocol === "https:" ||
+      (allowFileModuleLoads && url.protocol == "file:")
+    ) {
+      return url;
+    }
+    return false;
+  }
   const qjs = await quickjs.newQuickJSAsyncWASMModule();
   const runtime = qjs.newRuntime();
 
@@ -56,7 +70,7 @@ async function getNewContextWithGlobals({
     async (moduleName) => {
       if (verbose) {
         console.log(
-          `Loading module by name ${moduleName}. Is HTTP url? ${isValidHttpUrl(
+          `Loading module by name ${moduleName}. Is HTTP url? ${getValidImportURL(
             moduleName
           )}. Is in importMap? ${!!importMap[moduleName]}`
         );
@@ -70,14 +84,21 @@ async function getNewContextWithGlobals({
           "Attempting to load a remote module and allowRemoteModuleLoads is false"
         );
       }
-      if (isValidHttpUrl(moduleName)) {
+
+      const url = getValidImportURL(moduleName);
+      if (!url) {
+        throw new Error("Can't find module " + moduleName);
+      }
+      if (url.protocol == "file:") {
+        let text = await Deno.readTextFile(url.pathname);
+        return text;
+      }
+      if (url) {
         let url = new URL(moduleName);
         let resp = await fetch(url);
         let text = await resp.text();
         return text;
       }
-
-      throw new Error("Can't find module " + moduleName);
     },
     (baseModuleName, moduleNameRequest) => {
       if (verbose) {
@@ -85,7 +106,12 @@ async function getNewContextWithGlobals({
           `Module resolver: ${baseModuleName} - ${moduleNameRequest}`
         );
       }
-      if (isValidHttpUrl(moduleNameRequest, baseModuleName)) {
+      if (
+        getValidImportURL(
+          moduleNameRequest,
+          baseModuleName
+        )
+      ) {
         return new URL(moduleNameRequest, baseModuleName).toString();
       }
       return moduleNameRequest;
@@ -134,6 +160,7 @@ export async function execInSandbox(code, options = {}) {
   const verbose = options.verbose || false;
   const entrypoint = options.entrypoint || false;
   const header = options.header || "";
+  let allowFileModuleLoads = options.allowFileModuleLoads || false;
   let allowRemoteModuleLoads = true;
   if (typeof options.allowRemoteModuleLoads !== "undefined") {
     allowRemoteModuleLoads = options.allowRemoteModuleLoads;
@@ -184,6 +211,7 @@ export async function execInSandbox(code, options = {}) {
     importMap,
     verbose,
     allowRemoteModuleLoads,
+    allowFileModuleLoads,
     isModule,
   });
 
