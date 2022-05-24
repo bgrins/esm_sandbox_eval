@@ -69,6 +69,9 @@ async function getNewContextWithGlobals({
   let interruptCycles = 0;
   runtime.setInterruptHandler(() => ++interruptCycles > MAX_INTERRUPTS);
 
+  // Alternatively we could compile the bundle into an eval instead of allowing
+  // the runtime to load modules. This might make sense if it's not possible
+  // to handle errors properly from module evaluation.
   runtime.setModuleLoader(
     async (moduleName) => {
       if (verbose) {
@@ -194,16 +197,26 @@ export async function execInSandbox(code, options = {}) {
   if (isModule) {
     if (entrypoint) {
       code = `
-    import {${entrypoint}} from "eval-module.js";
-    (async() => {
-      globalThis.result = await ${entrypoint}(__exposed);
-    })();
+      import {${entrypoint}} from "eval-module.js";
+      (async() => {
+        try {
+          console.log(__exposed);
+          globalThis.__result = await ${entrypoint}(__exposed);
+        } catch(error) {
+          globalThis.__error = error;
+        }
+      })();
     `;
     } else {
       code = `
       import mod from "eval-module.js";
       (async() => {
-        globalThis.result = await mod(__exposed);
+        try {
+          console.log(__exposed);
+          globalThis.__result = await mod(__exposed);
+        } catch(error) {
+          globalThis.__error = error;
+        }
       })();
       `;
     }
@@ -217,7 +230,10 @@ export async function execInSandbox(code, options = {}) {
     isModule,
   });
 
+  // Error case 1: awaiting this promise will throw if
+  // there's an error in the main event loop
   const asyncResult = await vm.evalCodeAsync(code);
+
   const promise = vm
     .unwrapResult(asyncResult)
     .consume((result) => vm.resolvePromise(result));
@@ -225,7 +241,8 @@ export async function execInSandbox(code, options = {}) {
 
   const result = await promise;
 
-  // Rethrow errors from the sandbox
+  // Error case 2: the result will have an error object if there was an exception in
+  // an async event. But NOT if being evaluated as a module.
   if (result.error) {
     const vmError = vm.dump(result.error);
     result.error.dispose();
@@ -237,8 +254,21 @@ export async function execInSandbox(code, options = {}) {
     throw error;
   }
 
+  // Error case 3: we catch an async error in a module and stick it on globalThis.
+  let errorValue = isModule
+    ? vm.getProp(vm.global, "__error").consume(vm.dump)
+    : null;
+  if (errorValue) {
+    vm.dispose();
+    vm.runtime.dispose();
+    let error = new Error(errorValue.message + "\n" + errorValue.stack);
+    error.name = errorValue.name;
+    console.error("Error in vm (module):", errorValue);
+    throw error;
+  }
+
   let value = isModule
-    ? vm.getProp(vm.global, "result").consume(vm.dump)
+    ? vm.getProp(vm.global, "__result").consume(vm.dump)
     : vm.dump(result.value);
 
   result.value.dispose();
