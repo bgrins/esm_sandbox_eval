@@ -6,6 +6,9 @@ export { quickjs };
 const MEMORY_LIMIT = 1024 * 1024 * 32;
 const MAX_INTERRUPTS = 1024;
 
+// TODO: MAX_IMPORTS (depth or just total num)
+// TODO: compile to single bundle (and worker)
+
 function parseScript(script) {
   // We expect to fail if there's an import/export:
   try {
@@ -106,12 +109,7 @@ async function getNewContextWithGlobals({
           `Module resolver: ${baseModuleName} - ${moduleNameRequest}`
         );
       }
-      if (
-        getValidImportURL(
-          moduleNameRequest,
-          baseModuleName
-        )
-      ) {
+      if (getValidImportURL(moduleNameRequest, baseModuleName)) {
         return new URL(moduleNameRequest, baseModuleName).toString();
       }
       return moduleNameRequest;
@@ -197,12 +195,16 @@ export async function execInSandbox(code, options = {}) {
     if (entrypoint) {
       code = `
     import {${entrypoint}} from "eval-module.js";
-    globalThis.result = ${entrypoint}(__exposed);
+    (async() => {
+      globalThis.result = await ${entrypoint}(__exposed);
+    })();
     `;
     } else {
       code = `
       import mod from "eval-module.js";
-      globalThis.result = mod(__exposed);
+      (async() => {
+        globalThis.result = await mod(__exposed);
+      })();
       `;
     }
   }
@@ -220,6 +222,7 @@ export async function execInSandbox(code, options = {}) {
     .unwrapResult(asyncResult)
     .consume((result) => vm.resolvePromise(result));
   vm.runtime.executePendingJobs();
+
   const result = await promise;
 
   // Rethrow errors from the sandbox
@@ -230,6 +233,7 @@ export async function execInSandbox(code, options = {}) {
     vm.runtime.dispose();
     let error = new Error(vmError.message + "\n" + vmError.stack);
     error.name = vmError.name;
+    console.error("Error in vm:", vmError);
     throw error;
   }
 
