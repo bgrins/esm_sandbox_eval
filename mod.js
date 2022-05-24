@@ -49,6 +49,7 @@ async function getNewContextWithGlobals({
 }) {
   function getValidImportURL(string, base) {
     let url = getURL(string, base);
+    console.log(url, url?.protocol, string, base, allowFileModuleLoads);
     if (!url) {
       return false;
     }
@@ -166,6 +167,17 @@ export async function execInSandbox(code, options = {}) {
   if (typeof options.allowRemoteModuleLoads !== "undefined") {
     allowRemoteModuleLoads = options.allowRemoteModuleLoads;
   }
+
+  console.log("Exec in sandbox", {
+    exposed,
+    importMap,
+    verbose,
+    entrypoint,
+    header,
+    allowFileModuleLoads,
+    allowRemoteModuleLoads,
+  });
+
   let isModule = false;
   let parseable = false;
   try {
@@ -200,7 +212,6 @@ export async function execInSandbox(code, options = {}) {
       import {${entrypoint}} from "eval-module.js";
       (async() => {
         try {
-          console.log(__exposed);
           globalThis.__result = await ${entrypoint}(__exposed);
         } catch(error) {
           globalThis.__error = error;
@@ -212,7 +223,6 @@ export async function execInSandbox(code, options = {}) {
       import mod from "eval-module.js";
       (async() => {
         try {
-          console.log(__exposed);
           globalThis.__result = await mod(__exposed);
         } catch(error) {
           globalThis.__error = error;
