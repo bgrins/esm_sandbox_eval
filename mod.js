@@ -1,6 +1,5 @@
 import quickjs from "./build/quickjs-module.js";
-import esprima from "https://esm.sh/esprima";
-
+import { parse as acornParse } from "https://esm.sh/acorn@8.7.1";
 export { quickjs };
 
 const MEMORY_LIMIT = 1024 * 1024 * 32;
@@ -12,14 +11,21 @@ const MAX_INTERRUPTS = 1024;
 function parseScript(script) {
   // We expect to fail if there's an import/export:
   try {
-    let parsed = esprima.parseScript(script);
+
+    let parsed = acornParse(script, {
+      ecmaVersion: 2022,
+      sourceType: "script",
+    });
     return {
       isModule: false,
       parsed,
     };
   } catch (e) {}
   try {
-    let parsed = esprima.parseModule(script);
+    let parsed = acornParse(script, {
+      ecmaVersion: 2022,
+      sourceType: "module",
+    });
     return {
       isModule: true,
       parsed,
@@ -49,7 +55,6 @@ async function getNewContextWithGlobals({
 }) {
   function getValidImportURL(string, base) {
     let url = getURL(string, base);
-    console.log(url, url?.protocol, string, base, allowFileModuleLoads);
     if (!url) {
       return false;
     }
