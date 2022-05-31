@@ -181,6 +181,7 @@ export async function execInSandbox(code, options = {}) {
     header,
     allowFileModuleLoads,
     allowRemoteModuleLoads,
+    code
   });
 
   let isModule = false;
