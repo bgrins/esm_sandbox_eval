@@ -11,7 +11,6 @@ const MAX_INTERRUPTS = 1024;
 function parseScript(script) {
   // We expect to fail if there's an import/export:
   try {
-
     let parsed = acornParse(script, {
       ecmaVersion: 2022,
       sourceType: "script",
@@ -173,16 +172,18 @@ export async function execInSandbox(code, options = {}) {
     allowRemoteModuleLoads = options.allowRemoteModuleLoads;
   }
 
-  console.log("Exec in sandbox", {
-    exposed,
-    importMap,
-    verbose,
-    entrypoint,
-    header,
-    allowFileModuleLoads,
-    allowRemoteModuleLoads,
-    code
-  });
+  if (verbose) {
+    console.log("Exec in sandbox", {
+      exposed,
+      importMap,
+      verbose,
+      entrypoint,
+      header,
+      allowFileModuleLoads,
+      allowRemoteModuleLoads,
+      code,
+    });
+  }
 
   let isModule = false;
   let parseable = false;
