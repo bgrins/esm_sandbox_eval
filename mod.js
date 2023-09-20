@@ -4,6 +4,8 @@ export { quickjs };
 
 const MEMORY_LIMIT = 1024 * 1024 * 32;
 const MAX_INTERRUPTS = 1024;
+const IS_WORKER =
+  typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope;
 
 // TODO: MAX_IMPORTS (depth or just total num)
 // TODO: compile to single bundle (and worker)
@@ -292,4 +294,47 @@ export async function execInSandbox(code, options = {}) {
   vm.dispose();
   vm.runtime.dispose();
   return value;
+}
+
+
+if (IS_WORKER) {
+  const HEALTHCHECK_INTERVAL = 100;
+  self.onmessage = async function (e) {
+    console.log(e, e.data);
+
+    // TODO: Run single step
+
+    if (e.data.type == "execInSandbox") {
+      try {
+        let { code, options } = e.data;
+
+        if (!code) {
+          throw new Error("No code provided");
+        }
+
+        let execResult = execInSandbox(code, options);
+        self.postMessage({
+          type: "execInSandboxStarted",
+          detail: {
+            time: performance.now(),
+          }
+        });
+        let resolvedResult = await execResult;
+        self.postMessage({
+          type: "execInSandboxComplete",
+          detail: {
+            result: resolvedResult,
+            time: performance.now(),
+          }
+        });
+      } catch (e) {
+        self.postMessage({
+          type: "execInSandboxError",
+          detail: {
+            e: e.toString(),
+          },
+        });
+      }
+    }
+  };
 }

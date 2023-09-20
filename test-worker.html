@@ -1,0 +1,10 @@
+<script>
+  let worker = new Worker("mod.bundle.js");
+  worker.onmessage = function (e) {
+    console.log(e.data);
+  };
+  worker.postMessage({
+    type: "execInSandbox",
+  });
+  worker.postMessage({ type: "execInSandbox", code: "1+1" });
+</script>
