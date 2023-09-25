@@ -1,10 +1,249 @@
-<script>
-  let worker = new Worker("mod.bundle.js");
-  worker.onmessage = function (e) {
-    console.log(e.data);
-  };
-  worker.postMessage({
-    type: "execInSandbox",
-  });
-  worker.postMessage({ type: "execInSandbox", code: "1+1" });
+<pre id="log"></pre>
+<script type="module">
+  import { execInSandbox } from "./esm_sandbox_worker.parent.js";
+
+  let log = document.getElementById("log");
+  let execs = [
+    { code: "1+1", options: {} },
+    { code: "2+2", options: {} },
+    { code: "3+3", options: {} },
+    { code: "4+4", options: {} },
+    {
+      code: "(async () => await new Promise(r => setTimeout(() => { console.log('calling from child'); r() }, 10)))()",
+      options: {
+        interruptAfterDeadline: 2000,
+      },
+    },
+    {
+      code: "(async () => await new Promise((resolve) => resolve(4)))();",
+      // options: {
+      //   interruptAfterDeadline: 2000,
+      // },
+    },
+    { code: "asdf1+1", options: {} },
+    { code: "new Date().toString()", options: {} },
+    {
+      code: "let i = 0; let j = 0; while (i < 1000000) { j+= i; i++; } console.log(j)",
+      options: {},
+    },
+    {
+      code: "let i = 0; let j = 0; while (i < 1000000) { j+= i; i++; } console.log(j)",
+      options: {
+        maxInterrupts: 1,
+      },
+    },
+    {
+      code: "let i = 0; let j = 0; while (i < 1000000) { j+= i; i++; } console.log(j)",
+      options: {
+        interruptAfterDeadline: 1,
+      },
+    },
+    {
+      code: `
+        import jmespath from "https://cdn.skypack.dev/jmespath";
+        import * as marked from "https://esm.sh/marked/";
+        export default function() { return jmespath.search(marked.lexer("# hi"), "[0].tokens"); }
+      `,
+      options: {},
+    },
+    {
+      code: `
+        import jmespath from "https://cdn.skypack.dev/jmespath";
+        import * as marked from "https://esm.sh/marked/";
+        export default function() { return jmespath.search(marked.lexer("# hi"), "[0].tokens"); }
+      `,
+      options: {},
+    },
+    {
+      code: `
+      
+        import {DOMParser, parseHTML} from 'https://esm.sh/linkedom';
+        import { Readability } from "https://esm.sh/@mozilla/readability";
+        export default function() {
+          const { document, customElements, HTMLElement } = parseHTML(${JSON.stringify(getSampleArticleContents())});
+
+          const reader = new Readability(document);
+          return reader.parse();
+        }
+        `,
+      options: {},
+    },
+    {
+      code: `
+      
+        import {DOMParser, parseHTML} from 'https://esm.sh/v132/linkedom@0.15.3/es2022/worker.bundle.js';
+        import { Readability } from "https://esm.sh/@mozilla/readability";
+        export default function() {
+          const { document, customElements, HTMLElement } = parseHTML(${JSON.stringify(getSampleArticleContents())});
+
+          const reader = new Readability(document);
+          return reader.parse();
+        }
+        `,
+      options: {},
+    },
+    
+  ];
+
+  for (let exec of execs) {
+    let resolver = execInSandbox(exec.code, exec.options);
+    console.log(resolver);
+    try {
+      let result = await resolver;
+      log.textContent += JSON.stringify(result, null, 2) + "\n";
+    } catch (e) {
+      console.log(e);
+      log.textContent += JSON.stringify(e, null, 2) + "\n";
+    }
+  }
+
+  // https://github.com/mozilla/readability/blob/49d345a455da1f4aa93f8b41e0f50422f9959c7c/test/test-pages/v8-blog/source.html
+  function getSampleArticleContents() {
+    return `
+
+<!doctype html>
+<html>
+<head>
+	<title>Example Domains</title>
+
+	<meta charset="utf-8" />
+	<meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	
+	<link rel="stylesheet" href="/_css/2022/iana_website.css"/>
+	<link rel="shortcut icon" type="image/ico" href="/_img/bookmark_icon.ico"/>
+
+	
+</head>
+
+<body>
+
+<header>
+    <div id="header">
+        <div id="logo">
+            <a href="/"><img src="/_img/2022/iana-logo-header.svg" alt="Homepage"/></a>
+        </div>
+        <div class="navigation">
+            <ul>
+                <li><a href="/domains">Domains</a></li>
+                <li><a href="/protocols">Protocols</a></li>
+                <li><a href="/numbers">Numbers</a></li>
+<!--                <li><a href="/news">News</a></li>-->
+                <li><a href="/about">About</a></li>
+            </ul>
+        </div>
+    </div>
+</header>
+
+<div id="body">
+
+
+<article class="hemmed sidenav">
+
+    <main>
+    
+<div class="help-article">
+
+<h1>Example Domains</h1>
+<p>As described in <a href="/go/rfc2606">RFC 2606</a> and <a href="/go/rfc6761">RFC 6761</a>, a
+number of domains such as example.com and example.org are maintained
+for documentation purposes. These domains may be used as illustrative
+examples in documents without prior coordination with us. They are not
+available for registration or transfer.</p>
+<p>We provide a web service on the example domain hosts to provide basic
+information on the purpose of the domain. These web services are
+provided as best effort, but are not designed to support production
+applications. While incidental traffic for incorrectly configured
+applications is expected, please do not design applications that require
+the example domains to have operating HTTP service.</p>
+<h2>Further Reading</h2>
+<ul>
+<li><a href="/domains/reserved">IANA-managed Reserved Domains</a></li>
+</ul>
+
+<div class="last-updated">Document last revised 2017-05-13.</div>
+
+
+</div>
+
+    </main>
+
+    <nav id="sidenav">
+    
+    </nav>
+
+</article>
+
+
+</div>
+
+<footer>
+    <div id="footer">
+        <table class="navigation">
+            <tr>
+                <td class="section"><a href="/domains">Domain&nbsp;Names</a></td>
+                <td class="subsection">
+                    <ul>
+                        <li><a href="/domains/root">Root Zone Registry</a></li>
+                        <li><a href="/domains/int">.INT Registry</a></li>
+                        <li><a href="/domains/arpa">.ARPA Registry</a></li>
+                        <li><a href="/domains/idn-tables">IDN Repository</a></li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td class="section"><a href="/numbers">Number&nbsp;Resources</a></td>
+                <td class="subsection">
+                    <ul>
+                        <li><a href="/abuse">Abuse Information</a></li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td class="section"><a href="/protocols">Protocols</a></td>
+                <td class="subsection">
+                    <ul>
+                        <li><a href="/protocols">Protocol Registries</a></li>
+                        <li><a href="/time-zones">Time Zone Database</a></li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td class="section"><a href="/about">About&nbsp;Us</a></td>
+                <td class="subsection">
+                    <ul>
+                        <li><a href="/performance">Performance</a></li>
+                        <li><a href="/reports">Reports</a></li>
+                        <li><a href="/reviews">Reviews</a></li>
+                        <li><a href="/about/excellence">Excellence</a></li>
+<!--                        <li><a href="/news">News</a></li>-->
+                        <li><a href="/contact">Contact Us</a></li>
+                    </ul>
+                </td>
+            </tr>
+        </table>
+
+        <div id="custodian">
+            <p>The IANA functions coordinate the Internet’s globally unique identifiers, and
+                are provided by <a href="http://pti.icann.org">Public Technical Identifiers</a>, an affiliate of
+                <a href="http://www.icann.org/">ICANN</a>.</p>
+        </div>
+
+        <div id="legalnotice">
+            <ul>
+                <li><a href="https://www.icann.org/privacy/policy">Privacy Policy</a></li>
+                <li><a href="https://www.icann.org/privacy/tos">Terms of Service</a></li>
+            </ul>
+        </div>
+
+    </div>
+</footer>
+
+
+
+</body>
+
+</html>
+`
+  }
 </script>

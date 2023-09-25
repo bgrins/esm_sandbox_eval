@@ -26672,7 +26672,8 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
         } catch (_) {}
         return url;
     }
-    async function getNewContextWithGlobals({ exposed, importMap, verbose, allowRemoteModuleLoads, allowFileModuleLoads, isModule }) {
+    async function getNewContextWithGlobals({ exposed, maxInterrupts = 1024, interruptAfterDeadline = 0, importMap, verbose, allowRemoteModuleLoads, allowFileModuleLoads, isModule }) {
+        console.log("Getting new context", maxInterrupts);
         function getValidImportURL(string, base) {
             let url = getURL(string, base);
             if (!url) {
@@ -26687,7 +26688,13 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
         const runtime = qjs.newRuntime();
         runtime.setMemoryLimit(MEMORY_LIMIT);
         let interruptCycles = 0;
-        runtime.setInterruptHandler(()=>++interruptCycles > 1024);
+        let deadline;
+        if (interruptAfterDeadline > 0) {
+            deadline = Date.now() + interruptAfterDeadline;
+        }
+        runtime.setInterruptHandler(()=>{
+            return ++interruptCycles > maxInterrupts || deadline && Date.now() > deadline;
+        });
         runtime.setModuleLoader(async (moduleName)=>{
             if (verbose) {
                 console.log(`Loading module by name ${moduleName}. Is HTTP url? ${getValidImportURL(moduleName)}. Is in importMap? ${!!importMap[moduleName]}`);
@@ -26732,6 +26739,21 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
                 vm.evalCode(`const ${name} = ${json};`);
             }
         }
+        vm.evalCode(`
+    const window = new Proxy({
+      performance: {
+        now: () => Date.now(),
+      },
+      PerformanceObserver: class {},
+      PerformanceEntry: class {},
+      PerformanceObserverEntryList: class {},
+    }, {
+      get(target, prop, receiver) {
+        console.log("Script attempting window lookup", prop)
+        return Reflect.get(...arguments);
+      },
+    });
+  `);
         const logHandle = vm.newFunction("log", (...args)=>{
             const nativeArgs = args.map(vm.dump);
             console.log("console.log from sandbox:", ...nativeArgs);
@@ -26827,7 +26849,9 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
             verbose,
             allowRemoteModuleLoads,
             allowFileModuleLoads,
-            isModule
+            isModule,
+            maxInterrupts: options.maxInterrupts,
+            interruptAfterDeadline: options.interruptAfterDeadline
         });
         const asyncResult = await vm.evalCodeAsync(code);
         const promise = vm.unwrapResult(asyncResult).consume((result)=>vm.resolvePromise(result));
@@ -26860,33 +26884,47 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
     }
     if (IS_WORKER) {
         self.onmessage = async function(e) {
-            console.log(e, e.data);
+            if (!e.data) {
+                return;
+            }
+            let { code, options, id } = e.data;
+            let start = performance.now();
             if (e.data.type == "execInSandbox") {
                 try {
-                    let { code, options } = e.data;
                     if (!code) {
-                        throw new Error("No code provided");
+                        throw new Error("No `code` provided");
+                    }
+                    if (!id) {
+                        console.error(e.data);
+                        throw new Error("No `id` provided, can't postMessage back");
                     }
                     let execResult = execInSandbox(code, options);
                     self.postMessage({
                         type: "execInSandboxStarted",
+                        id,
                         detail: {
-                            time: performance.now()
+                            now: start
                         }
                     });
                     let resolvedResult = await execResult;
                     self.postMessage({
                         type: "execInSandboxComplete",
+                        id,
                         detail: {
-                            result: resolvedResult,
-                            time: performance.now()
+                            now: performance.now(),
+                            runtime: performance.now() - start,
+                            result: resolvedResult
                         }
                     });
                 } catch (e) {
+                    console.error("execInSandboxError", e);
                     self.postMessage({
                         type: "execInSandboxError",
+                        id,
                         detail: {
-                            e: e.toString()
+                            now: performance.now(),
+                            runtime: performance.now() - start,
+                            error: e.toString()
                         }
                     });
                 }

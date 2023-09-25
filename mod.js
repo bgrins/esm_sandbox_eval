@@ -3,12 +3,12 @@ import { parse as acornParse } from "https://esm.sh/acorn@8.7.1";
 export { quickjs };
 
 const MEMORY_LIMIT = 1024 * 1024 * 32;
+const INTERRUPT_AFTER_DEADLINE = 0; // ms. 0 for none
 const MAX_INTERRUPTS = 1024;
 const IS_WORKER =
   typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope;
 
 // TODO: MAX_IMPORTS (depth or just total num)
-// TODO: compile to single bundle (and worker)
 
 function parseScript(script) {
   // We expect to fail if there's an import/export:
@@ -48,12 +48,15 @@ function getURL(string, base) {
 
 async function getNewContextWithGlobals({
   exposed,
+  maxInterrupts = MAX_INTERRUPTS,
+  interruptAfterDeadline = INTERRUPT_AFTER_DEADLINE,
   importMap,
   verbose,
   allowRemoteModuleLoads,
   allowFileModuleLoads,
   isModule,
 }) {
+  console.log("Getting new context", maxInterrupts);
   function getValidImportURL(string, base) {
     let url = getURL(string, base);
     if (!url) {
@@ -73,8 +76,18 @@ async function getNewContextWithGlobals({
   const runtime = qjs.newRuntime();
 
   runtime.setMemoryLimit(MEMORY_LIMIT);
+  // Need to build to a newer version for this
+  // runtime.setMaxStackSize(1024 * 320)
   let interruptCycles = 0;
-  runtime.setInterruptHandler(() => ++interruptCycles > MAX_INTERRUPTS);
+  let deadline;
+  if (interruptAfterDeadline > 0) {
+    deadline = Date.now() + interruptAfterDeadline;
+  }
+  runtime.setInterruptHandler(() => {
+    return (
+      ++interruptCycles > maxInterrupts || (deadline && Date.now() > deadline)
+    );
+  });
 
   // Alternatively we could compile the bundle into an eval instead of allowing
   // the runtime to load modules. This might make sense if it's not possible
@@ -143,6 +156,40 @@ async function getNewContextWithGlobals({
     }
   }
 
+  // Enough to get DOMParser working, with some logging for scripts that try to access window
+  vm.evalCode(`
+    const window = new Proxy({
+      performance: {
+        now: () => Date.now(),
+      },
+      PerformanceObserver: class {},
+      PerformanceEntry: class {},
+      PerformanceObserverEntryList: class {},
+    }, {
+      get(target, prop, receiver) {
+        console.log("Script attempting window lookup", prop)
+        return Reflect.get(...arguments);
+      },
+    });
+  `);
+
+  // This doesn't work yet:
+  // const setTimeoutHandle = vm.newFunction(
+  //   "setTimeout",
+  //   (vmFnHandle, timeoutHandle) => {
+  //     const vmFnHandleCopy = vmFnHandle.dup();
+  //     const timeout = vm.dump(timeoutHandle);
+  //     const timeoutID = setTimeout(() => {
+  //       console.log("Calling vm function")
+  //       vm.callFunction(vmFnHandleCopy, vm.undefined);
+  //     }, timeout);
+
+  //     return vm.newNumber(timeoutID);
+  //   }
+  // );
+  // vm.setProp(vm.global, "setTimeout", setTimeoutHandle);
+  // setTimeoutHandle.dispose();
+
   // Add partial console:
   const logHandle = vm.newFunction("log", (...args) => {
     const nativeArgs = args.map(vm.dump);
@@ -159,6 +206,7 @@ async function getNewContextWithGlobals({
   consoleHandle.dispose();
   logHandle.dispose();
   errorHandle.dispose();
+
   return vm;
 }
 
@@ -195,12 +243,15 @@ export async function execInSandbox(code, options = {}) {
   } catch (e) {
     try {
       // Handle a plain eval with a return value
+      // Could handle a single expression like `await 2` if we walked the AST, but for
+      // now you'd need `return await 2` or `(async () => await 2)()`
       code = `(async () => {
         ${code}
       })()`;
       parseScript(code);
       parseable = true;
-    } catch (e) {}
+    } catch (e) {
+    }
   }
 
   if (!parseable) {
@@ -247,6 +298,8 @@ export async function execInSandbox(code, options = {}) {
     allowRemoteModuleLoads,
     allowFileModuleLoads,
     isModule,
+    maxInterrupts: options.maxInterrupts,
+    interruptAfterDeadline: options.interruptAfterDeadline,
   });
 
   // Error case 1: awaiting this promise will throw if
@@ -296,42 +349,50 @@ export async function execInSandbox(code, options = {}) {
   return value;
 }
 
-
 if (IS_WORKER) {
-  const HEALTHCHECK_INTERVAL = 100;
   self.onmessage = async function (e) {
-    console.log(e, e.data);
-
-    // TODO: Run single step
-
+    if (!e.data) {
+      return;
+    }
+    let { code, options, id } = e.data;
+    let start = performance.now();
     if (e.data.type == "execInSandbox") {
       try {
-        let { code, options } = e.data;
-
         if (!code) {
-          throw new Error("No code provided");
+          throw new Error("No `code` provided");
+        }
+        if (!id) {
+          console.error(e.data);
+          throw new Error("No `id` provided, can't postMessage back");
         }
 
         let execResult = execInSandbox(code, options);
         self.postMessage({
           type: "execInSandboxStarted",
+          id,
           detail: {
-            time: performance.now(),
-          }
+            now: start,
+          },
         });
         let resolvedResult = await execResult;
         self.postMessage({
           type: "execInSandboxComplete",
+          id,
           detail: {
+            now: performance.now(),
+            runtime: performance.now() - start,
             result: resolvedResult,
-            time: performance.now(),
-          }
+          },
         });
       } catch (e) {
+        console.error("execInSandboxError", e);
         self.postMessage({
           type: "execInSandboxError",
+          id,
           detail: {
-            e: e.toString(),
+            now: performance.now(),
+            runtime: performance.now() - start,
+            error: e.toString(),
           },
         });
       }

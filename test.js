@@ -8,6 +8,9 @@ import { execInSandbox } from "./mod.js";
 
 Deno.test("basics", async () => {
   assertEquals(await execInSandbox("return 1+1"), 2);
+  assertEquals(await execInSandbox("return await 2"), 2);
+  assertEquals(await execInSandbox("(async () => { return 2; })()"), 2);
+  assertEquals(await execInSandbox("(async () => 2)()"), 2);
   assertEquals(
     await execInSandbox("return a+b", {
       exposed: {
