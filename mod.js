@@ -54,6 +54,7 @@ async function getNewContextWithGlobals({
   verbose,
   allowRemoteModuleLoads,
   allowFileModuleLoads,
+  prepareVM,
   isModule,
 }) {
   console.log("Getting new context", maxInterrupts);
@@ -173,6 +174,8 @@ async function getNewContextWithGlobals({
     });
   `);
 
+  prepareVM(vm);
+  
   // This doesn't work yet:
   // const setTimeoutHandle = vm.newFunction(
   //   "setTimeout",
@@ -216,6 +219,7 @@ export async function execInSandbox(code, options = {}) {
   const verbose = options.verbose || false;
   const entrypoint = options.entrypoint || false;
   const header = options.header || "";
+  const prepareVM = options.prepareVM || function() {};
   let allowFileModuleLoads = options.allowFileModuleLoads || false;
   let allowRemoteModuleLoads = true;
   if (typeof options.allowRemoteModuleLoads !== "undefined") {
@@ -230,6 +234,7 @@ export async function execInSandbox(code, options = {}) {
       entrypoint,
       header,
       allowFileModuleLoads,
+      prepareVM,
       allowRemoteModuleLoads,
       code,
     });
@@ -297,6 +302,7 @@ export async function execInSandbox(code, options = {}) {
     verbose,
     allowRemoteModuleLoads,
     allowFileModuleLoads,
+    prepareVM,
     isModule,
     maxInterrupts: options.maxInterrupts,
     interruptAfterDeadline: options.interruptAfterDeadline,

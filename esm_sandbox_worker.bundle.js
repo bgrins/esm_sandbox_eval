@@ -26672,7 +26672,7 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
         } catch (_) {}
         return url;
     }
-    async function getNewContextWithGlobals({ exposed, maxInterrupts = 1024, interruptAfterDeadline = 0, importMap, verbose, allowRemoteModuleLoads, allowFileModuleLoads, isModule }) {
+    async function getNewContextWithGlobals({ exposed, maxInterrupts = 1024, interruptAfterDeadline = 0, importMap, verbose, allowRemoteModuleLoads, allowFileModuleLoads, prepareVM, isModule }) {
         console.log("Getting new context", maxInterrupts);
         function getValidImportURL(string, base) {
             let url = getURL(string, base);
@@ -26754,6 +26754,7 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
       },
     });
   `);
+        prepareVM(vm);
         const logHandle = vm.newFunction("log", (...args)=>{
             const nativeArgs = args.map(vm.dump);
             console.log("console.log from sandbox:", ...nativeArgs);
@@ -26777,6 +26778,7 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
         const verbose = options.verbose || false;
         const entrypoint = options.entrypoint || false;
         const header = options.header || "";
+        const prepareVM = options.prepareVM || function() {};
         let allowFileModuleLoads = options.allowFileModuleLoads || false;
         let allowRemoteModuleLoads = true;
         if (typeof options.allowRemoteModuleLoads !== "undefined") {
@@ -26790,6 +26792,7 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
                 entrypoint,
                 header,
                 allowFileModuleLoads,
+                prepareVM,
                 allowRemoteModuleLoads,
                 code
             });
@@ -26849,6 +26852,7 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
             verbose,
             allowRemoteModuleLoads,
             allowFileModuleLoads,
+            prepareVM,
             isModule,
             maxInterrupts: options.maxInterrupts,
             interruptAfterDeadline: options.interruptAfterDeadline
