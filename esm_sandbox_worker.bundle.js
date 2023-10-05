@@ -24608,7 +24608,7 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
         this.shorthandAssign = this.trailingComma = this.parenthesizedAssign = this.parenthesizedBind = this.doubleProto = -1;
     };
     k.checkPatternErrors = function(e, t) {
-        if (!!e) {
+        if (e) {
             e.trailingComma > -1 && this.raiseRecoverable(e.trailingComma, "Comma is not permitted after the rest element");
             var i = t ? e.parenthesizedAssign : e.parenthesizedBind;
             i > -1 && this.raiseRecoverable(i, "Parenthesized pattern");
@@ -24952,7 +24952,7 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
         return this.finishNode(e, "ExportNamedDeclaration");
     };
     l.checkExport = function(e, t, i) {
-        !e || (typeof t != "string" && (t = t.type === "Identifier" ? t.name : t.value), K(e, t) && this.raiseRecoverable(i, "Duplicate export '" + t + "'"), e[t] = !0);
+        e && (typeof t != "string" && (t = t.type === "Identifier" ? t.name : t.value), K(e, t) && this.raiseRecoverable(i, "Duplicate export '" + t + "'"), e[t] = !0);
     };
     l.checkPatternExport = function(e, t) {
         var i = t.type;
@@ -24968,7 +24968,7 @@ Defaulting to 2020, but this will stop working in the future.`)), t.ecmaVersion 
         else i === "Property" ? this.checkPatternExport(e, t.value) : i === "AssignmentPattern" ? this.checkPatternExport(e, t.left) : i === "RestElement" ? this.checkPatternExport(e, t.argument) : i === "ParenthesizedExpression" && this.checkPatternExport(e, t.expression);
     };
     l.checkVariableExport = function(e, t) {
-        if (!!e) for(var i = 0, s = t; i < s.length; i += 1){
+        if (e) for(var i = 0, s = t; i < s.length; i += 1){
             var r = s[i];
             this.checkPatternExport(e, r.id);
         }
