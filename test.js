@@ -65,7 +65,7 @@ Deno.test("basics", async () => {
   assertEquals(
     await execInSandbox(
       `
-    import jmespath from "https://cdn.skypack.dev/jmespath";
+    import jmespath from "https://cdn.skypack.dev/jmespath@0.16.0";
     console.log(jmespath);
     console.log(jmespath.search({a: 100}, "a"));
     export default function({input, options}) {
@@ -96,7 +96,7 @@ Deno.test("basics", async () => {
   try {
     await execInSandbox(
       `
-      import jmespath from "https://cdn.skypack.dev/jmespath";
+      import jmespath from "https://cdn.skypack.dev/jmespath@0.16.0";
       export default function() { return 1; }
     `,
       {
@@ -111,8 +111,8 @@ Deno.test("basics", async () => {
   assertEquals(
     await execInSandbox(
       `
-    import jmespath from "https://cdn.skypack.dev/jmespath";
-    import * as marked from "https://esm.sh/marked/";
+    import jmespath from "https://cdn.skypack.dev/jmespath@0.16.0";
+    import * as marked from "https://esm.sh/marked@15.0.0";
     export default function({input, options}) { return jmespath.search(marked.lexer(input), "[0].tokens"); }
     `,
       {
@@ -125,6 +125,7 @@ Deno.test("basics", async () => {
     ),
     [
       {
+        escaped: false,
         raw: "hello",
         text: "hello",
         type: "text",
@@ -134,8 +135,8 @@ Deno.test("basics", async () => {
   assertEquals(
     await execInSandbox(
       `
-    import jmespath from "https://cdn.skypack.dev/jmespath";
-    import * as marked from "https://esm.sh/marked/";
+    import jmespath from "https://cdn.skypack.dev/jmespath@0.16.0";
+    import * as marked from "https://esm.sh/marked@15.0.0";
     export function custom({input, options}) { return jmespath.search(marked.lexer(input), "[0].tokens"); }
     `,
       {
@@ -149,6 +150,7 @@ Deno.test("basics", async () => {
     ),
     [
       {
+        escaped: false,
         raw: "hello",
         text: "hello",
         type: "text",
