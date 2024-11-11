@@ -1,13 +1,5 @@
 {
   "version": "4",
-  "specifiers": {
-    "npm:acorn@8.7.1": "8.7.1"
-  },
-  "npm": {
-    "acorn@8.7.1": {
-      "integrity": "sha512-Xx54uLJQZ19lKygFXOWsscKUbsBZW0CPykPhVQdhIeIwrbPmJzqeASDInc8nKBnp/JT6igTs82qPXz069H8I/A=="
-    }
-  },
   "remote": {
     "https://deno.land/std@0.137.0/fmt/colors.ts": "30455035d6d728394781c10755351742dd731e3db6771b1843f9b9e490104d37",
     "https://deno.land/std@0.137.0/testing/_diff.ts": "029a00560b0d534bc0046f1bce4bd36b3b41ada3f2a3178c85686eb2ff5f1413",
