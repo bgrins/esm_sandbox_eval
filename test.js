@@ -1,9 +1,6 @@
 // deno test -A test.js --watch
 
-import {
-  assertEquals,
-  assert,
-} from "https://deno.land/std@0.137.0/testing/asserts.ts";
+import { assertEquals, assert } from "jsr:@std/assert";
 import { execInSandbox } from "./mod.js";
 
 Deno.test("basics", async () => {

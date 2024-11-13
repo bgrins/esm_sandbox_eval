@@ -1,249 +1,548 @@
-<pre id="log"></pre>
-<script type="module">
-  import { execInSandbox } from "./esm_sandbox_worker.parent.js";
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>execInSandbox Dashboard</title>
+    <style>
+      :root {
+        --primary-color: #2563eb;
+        --background-color: #f8fafc;
+        --border-color: #e2e8f0;
+        --text-color: #1e293b;
+        --success-color: #22c55e;
+        --error-color: #ef4444;
+      }
 
-  let log = document.getElementById("log");
-  let execs = [
-    { code: "1+1", options: {} },
-    { code: "2+2", options: {} },
-    { code: "3+3", options: {} },
-    { code: "4+4", options: {} },
-    {
-      code: "(async () => await new Promise(r => setTimeout(() => { console.log('calling from child'); r() }, 10)))()",
-      options: {
-        interruptAfterDeadline: 2000,
-      },
-    },
-    {
-      code: "(async () => await new Promise((resolve) => resolve(4)))();",
-      // options: {
-      //   interruptAfterDeadline: 2000,
-      // },
-    },
-    { code: "asdf1+1", options: {} },
-    { code: "new Date().toString()", options: {} },
-    {
-      code: "let i = 0; let j = 0; while (i < 1000000) { j+= i; i++; } console.log(j)",
-      options: {},
-    },
-    {
-      code: "let i = 0; let j = 0; while (i < 1000000) { j+= i; i++; } console.log(j)",
-      options: {
-        maxInterrupts: 1,
-      },
-    },
-    {
-      code: "let i = 0; let j = 0; while (i < 1000000) { j+= i; i++; } console.log(j)",
-      options: {
-        interruptAfterDeadline: 1,
-      },
-    },
-    {
-      code: `
-        import jmespath from "https://cdn.skypack.dev/jmespath";
-        import * as marked from "https://esm.sh/marked/";
-        export default function() { return jmespath.search(marked.lexer("# hi"), "[0].tokens"); }
-      `,
-      options: {},
-    },
-    {
-      code: `
-        import jmespath from "https://cdn.skypack.dev/jmespath";
-        import * as marked from "https://esm.sh/marked/";
-        export default function() { return jmespath.search(marked.lexer("# hi"), "[0].tokens"); }
-      `,
-      options: {},
-    },
-    {
-      code: `
-      
-        import {DOMParser, parseHTML} from 'https://esm.sh/linkedom';
-        import { Readability } from "https://esm.sh/@mozilla/readability";
-        export default function() {
-          const { document, customElements, HTMLElement } = parseHTML(${JSON.stringify(getSampleArticleContents())});
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
 
-          const reader = new Readability(document);
-          return reader.parse();
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        line-height: 1.5;
+        color: var(--text-color);
+        background: var(--background-color);
+        padding: 2rem;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      .header {
+        margin-bottom: 2rem;
+      }
+
+      .header h1 {
+        font-size: 1.875rem;
+        font-weight: 600;
+        color: var(--text-color);
+        margin-bottom: 0.5rem;
+      }
+
+      .code-input {
+        margin-bottom: 2rem;
+      }
+
+      .script-selector {
+        margin-bottom: 1rem;
+      }
+
+      .script-selector select {
+        width: 100%;
+        padding: 0.5rem;
+        font-size: 0.875rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        background: white;
+      }
+
+      .code-editor {
+        width: 100%;
+        min-height: 200px;
+        padding: 1rem;
+        font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+        font-size: 0.875rem;
+        line-height: 1.7;
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        background: white;
+        resize: vertical;
+      }
+
+      .controls {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+      }
+
+      .button {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: white;
+        background: var(--primary-color);
+        border: none;
+        border-radius: 0.375rem;
+        cursor: pointer;
+        transition: opacity 0.2s;
+      }
+
+      .button:hover {
+        opacity: 0.9;
+      }
+
+      .button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .execution-list {
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        overflow: hidden;
+      }
+
+      .execution-item {
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .execution-item:last-child {
+        border-bottom: none;
+      }
+
+      .execution-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+      }
+
+      .execution-title {
+        font-weight: 500;
+      }
+
+      .execution-status {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 9999px;
+      }
+
+      .status-running {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+
+      .status-success {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .status-error {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      .execution-result {
+        font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+        font-size: 0.875rem;
+        padding: 1rem;
+        background: #f8fafc;
+        border-radius: 0.375rem;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+
+      .progress-bar {
+        height: 4px;
+        background: #e2e8f0;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 1rem;
+      }
+
+      .progress-bar-fill {
+        height: 100%;
+        background: var(--primary-color);
+        width: 0%;
+        transition: width 0.3s ease;
+      }
+
+      .options {
+        margin-bottom: 1rem;
+        padding: 1rem;
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+      }
+
+      .options-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+      }
+
+      .worker-status {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+      }
+
+      .worker-indicator {
+        width: 1rem;
+        height: 1rem;
+        border-radius: 50%;
+        background: #e2e8f0;
+        transition: background-color 0.3s;
+      }
+
+      .worker-indicator.active {
+        background: var(--primary-color);
+        animation: pulse 1s infinite;
+      }
+
+      .worker-indicator.idle {
+        background: var(--success-color);
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
         }
-        `,
-      options: {},
-    },
-    {
-      code: `
-      
-        import {DOMParser, parseHTML} from 'https://esm.sh/v132/linkedom@0.15.3/es2022/worker.bundle.js';
-        import { Readability } from "https://esm.sh/@mozilla/readability";
-        export default function() {
-          const { document, customElements, HTMLElement } = parseHTML(${JSON.stringify(getSampleArticleContents())});
-
-          const reader = new Readability(document);
-          return reader.parse();
+        50% {
+          opacity: 0.6;
         }
-        `,
-      options: {},
-    },
-    
-  ];
+        100% {
+          opacity: 1;
+        }
+      }
 
-  for (let exec of execs) {
-    let resolver = execInSandbox(exec.code, exec.options);
-    console.log(resolver);
-    try {
-      let result = await resolver;
-      log.textContent += JSON.stringify(result, null, 2) + "\n";
-    } catch (e) {
-      console.log(e);
-      log.textContent += JSON.stringify(e, null, 2) + "\n";
-    }
-  }
+      .slider-container {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
 
-  // https://github.com/mozilla/readability/blob/49d345a455da1f4aa93f8b41e0f50422f9959c7c/test/test-pages/v8-blog/source.html
-  function getSampleArticleContents() {
-    return `
+      .slider-container input[type="range"] {
+        flex: 1;
+      }
 
-<!doctype html>
-<html>
-<head>
-	<title>Example Domains</title>
+      .slider-value {
+        min-width: 3rem;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
 
-	<meta charset="utf-8" />
-	<meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-	<meta name="viewport" content="width=device-width, initial-scale=1" />
-	
-	<link rel="stylesheet" href="/_css/2022/iana_website.css"/>
-	<link rel="shortcut icon" type="image/ico" href="/_img/bookmark_icon.ico"/>
+      .option-group label {
+        display: block;
+        font-size: 0.875rem;
+        margin-bottom: 0.25rem;
+      }
 
-	
-</head>
+      .option-group input {
+        width: 100%;
+        padding: 0.375rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.25rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header class="header">
+        <h1>Code Execution Dashboard</h1>
+        <p>Execute JavaScript code and monitor progress in real-time</p>
+      </header>
 
-<body>
+      <div class="script-selector">
+        <select id="scriptSelect">
+          <option value="">Select a preset script...</option>
+        </select>
+      </div>
 
-<header>
-    <div id="header">
-        <div id="logo">
-            <a href="/"><img src="/_img/2022/iana-logo-header.svg" alt="Homepage"/></a>
+      <div class="code-input">
+        <textarea
+          id="codeEditor"
+          class="code-editor"
+          placeholder="Enter your JavaScript code here..."
+        ></textarea>
+      </div>
+
+      <div class="options">
+        <div class="options-grid">
+          <div class="option-group">
+            <label for="timeoutInput">Timeout (ms):</label>
+            <input type="number" id="timeoutInput" value="2000" min="0">
+          </div>
+          <div class="option-group">
+            <label for="maxInterruptsInput">Max Interrupts:</label>
+            <input type="number" id="maxInterruptsInput" value="1000" min="0">
+          </div>
+          <div class="option-group">
+            <label for="workerSlider">Worker Count:</label>
+            <div class="slider-container">
+              <input type="range" id="workerSlider" min="1" max="10" value="5">
+              <span id="workerCount" class="slider-value">5</span>
+            </div>
+            <div class="worker-status" id="workerStatus"></div>
+          </div>
         </div>
-        <div class="navigation">
-            <ul>
-                <li><a href="/domains">Domains</a></li>
-                <li><a href="/protocols">Protocols</a></li>
-                <li><a href="/numbers">Numbers</a></li>
-<!--                <li><a href="/news">News</a></li>-->
-                <li><a href="/about">About</a></li>
-            </ul>
-        </div>
+      </div>
+
+      <div class="controls">
+        <button id="runButton" class="button">Run Code</button>
+        <button id="clearButton" class="button">Clear Results</button>
+        <button id="runAllButton" class="button">Run All Presets</button>
+      </div>
+
+      <div class="progress-bar">
+        <div id="progressBarFill" class="progress-bar-fill"></div>
+      </div>
+
+      <div id="executionList" class="execution-list"></div>
     </div>
-</header>
 
-<div id="body">
+    <script type="module">
+      import {
+        execInSandbox,
+        setNumWorkers,
+        workerPool,
+      } from "./esm_sandbox_worker.parent.js";
 
+      setNumWorkers(5);
 
-<article class="hemmed sidenav">
+      const presetScripts = [
+        { name: "Simple Addition 1", code: "1+1" },
+        { name: "Simple Addition 2", code: "2+2" },
+        { name: "Simple Addition 3", code: "3+3" },
+        { name: "Simple Addition 4", code: "4+4" },
+        {
+          name: "Async Timeout",
+          code:
+            "(async () => await new Promise(r => setTimeout(() => { console.log('calling from child'); r() }, 10)))()",
+          options: { interruptAfterDeadline: 2000 },
+        },
+        {
+          name: "Async Promise",
+          code: "(async () => await new Promise((resolve) => resolve(4)))();",
+        },
+        { name: "Error Test", code: "asdf1+1" },
+        { name: "Current Date", code: "new Date().toString()" },
+        {
+          name: "Loop Test 1",
+          code:
+            "let i = 0; let j = 0; while (i < 1000000) { j+= i; i++; } console.log(j)",
+        },
+        {
+          name: "Loop Test 2",
+          code:
+            "let i = 0; let j = 0; while (i < 1000000) { j+= i; i++; } console.log(j)",
+          options: { maxInterrupts: 1 },
+        },
+        {
+          name: "Loop Test 3",
+          code:
+            "let i = 0; let j = 0; while (i < 1000000) { j+= i; i++; } console.log(j)",
+          options: { interruptAfterDeadline: 1 },
+        },
+        {
+          name: "External Imports Test 1",
+          code: `
+                  import jmespath from "https://cdn.skypack.dev/jmespath";
+                  import * as marked from "https://esm.sh/marked/";
+                  export default function() { return jmespath.search(marked.lexer("# hi"), "[0].tokens"); }
+              `,
+        },
+        {
+          name: "DOM Parser Test",
+          code: `
+                  import {DOMParser, parseHTML} from 'https://esm.sh/linkedom';
+                  import { Readability } from "https://esm.sh/@mozilla/readability";
+                  const html = \`<!doctype html><html><head><title>Test</title></head><body><h1>Hello World</h1></body></html>\`;
+                  const { document } = parseHTML(html);
+                  const reader = new Readability(document);
+                  export default function() { return reader.parse(); }
+              `,
+        },
+      ];
 
-    <main>
-    
-<div class="help-article">
+      let activeWorkers = new Set();
+      function updateWorkerStatus() {
+        const statusContainer = document.getElementById("workerStatus");
+        statusContainer.innerHTML = "";
 
-<h1>Example Domains</h1>
-<p>As described in <a href="/go/rfc2606">RFC 2606</a> and <a href="/go/rfc6761">RFC 6761</a>, a
-number of domains such as example.com and example.org are maintained
-for documentation purposes. These domains may be used as illustrative
-examples in documents without prior coordination with us. They are not
-available for registration or transfer.</p>
-<p>We provide a web service on the example domain hosts to provide basic
-information on the purpose of the domain. These web services are
-provided as best effort, but are not designed to support production
-applications. While incidental traffic for incorrectly configured
-applications is expected, please do not design applications that require
-the example domains to have operating HTTP service.</p>
-<h2>Further Reading</h2>
-<ul>
-<li><a href="/domains/reserved">IANA-managed Reserved Domains</a></li>
-</ul>
+        const totalWorkers = parseInt(workerSlider.value);
 
-<div class="last-updated">Document last revised 2017-05-13.</div>
+        for (let i = 0; i < totalWorkers; i++) {
+          const indicator = document.createElement("div");
+          indicator.className = "worker-indicator " +
+            (activeWorkers.has(i) ? "active" : "idle");
+          statusContainer.appendChild(indicator);
+        }
+      }
 
+      const originalExecuteTask = workerPool.executeTask;
+      workerPool.executeTask = function (worker, task) {
+        const workerIndex = this.workers.indexOf(worker);
+        activeWorkers.add(workerIndex);
+        updateWorkerStatus();
 
-</div>
+        originalExecuteTask.call(this, worker, task);
+      };
 
-    </main>
+      const originalHandleWorkerMessage = workerPool.handleWorkerMessage;
+      workerPool.handleWorkerMessage = function (worker, e) {
+        const workerIndex = this.workers.indexOf(worker);
+        activeWorkers.delete(workerIndex);
+        updateWorkerStatus();
 
-    <nav id="sidenav">
-    
-    </nav>
+        originalHandleWorkerMessage.call(this, worker, e);
+      };
 
-</article>
+      const scriptSelect = document.getElementById("scriptSelect");
+      const workerSlider = document.getElementById("workerSlider");
+      const workerCountDisplay = document.getElementById("workerCount");
+      const codeEditor = document.getElementById("codeEditor");
+      const runButton = document.getElementById("runButton");
+      const runAllButton = document.getElementById("runAllButton");
+      const clearButton = document.getElementById("clearButton");
+      const executionList = document.getElementById("executionList");
+      const progressBarFill = document.getElementById("progressBarFill");
+      const timeoutInput = document.getElementById("timeoutInput");
+      const maxInterruptsInput = document.getElementById("maxInterruptsInput");
 
+      let executionCount = 0;
 
-</div>
+      presetScripts.forEach((script, index) => {
+        const option = document.createElement("option");
+        option.value = index;
+        option.textContent = script.name;
+        scriptSelect.appendChild(option);
+      });
 
-<footer>
-    <div id="footer">
-        <table class="navigation">
-            <tr>
-                <td class="section"><a href="/domains">Domain&nbsp;Names</a></td>
-                <td class="subsection">
-                    <ul>
-                        <li><a href="/domains/root">Root Zone Registry</a></li>
-                        <li><a href="/domains/int">.INT Registry</a></li>
-                        <li><a href="/domains/arpa">.ARPA Registry</a></li>
-                        <li><a href="/domains/idn-tables">IDN Repository</a></li>
-                    </ul>
-                </td>
-            </tr>
-            <tr>
-                <td class="section"><a href="/numbers">Number&nbsp;Resources</a></td>
-                <td class="subsection">
-                    <ul>
-                        <li><a href="/abuse">Abuse Information</a></li>
-                    </ul>
-                </td>
-            </tr>
-            <tr>
-                <td class="section"><a href="/protocols">Protocols</a></td>
-                <td class="subsection">
-                    <ul>
-                        <li><a href="/protocols">Protocol Registries</a></li>
-                        <li><a href="/time-zones">Time Zone Database</a></li>
-                    </ul>
-                </td>
-            </tr>
-            <tr>
-                <td class="section"><a href="/about">About&nbsp;Us</a></td>
-                <td class="subsection">
-                    <ul>
-                        <li><a href="/performance">Performance</a></li>
-                        <li><a href="/reports">Reports</a></li>
-                        <li><a href="/reviews">Reviews</a></li>
-                        <li><a href="/about/excellence">Excellence</a></li>
-<!--                        <li><a href="/news">News</a></li>-->
-                        <li><a href="/contact">Contact Us</a></li>
-                    </ul>
-                </td>
-            </tr>
-        </table>
+      function createExecutionItem(code, name = "") {
+        const executionId = ++executionCount;
+        const item = document.createElement("div");
+        item.className = "execution-item";
+        item.innerHTML = `
+              <div class="execution-header">
+                  <span class="execution-title">Execution #${executionId}${
+          name ? ` - ${name}` : ""
+        }</span>
+                  <span class="execution-status status-running">Running</span>
+              </div>
+              <pre class="execution-result">${code}</pre>
+          `;
+        executionList.insertBefore(item, executionList.firstChild);
+        return item;
+      }
 
-        <div id="custodian">
-            <p>The IANA functions coordinate the Internet’s globally unique identifiers, and
-                are provided by <a href="http://pti.icann.org">Public Technical Identifiers</a>, an affiliate of
-                <a href="http://www.icann.org/">ICANN</a>.</p>
-        </div>
+      function updateExecutionStatus(item, status, result) {
+        const statusElement = item.querySelector(".execution-status");
+        const resultElement = item.querySelector(".execution-result");
 
-        <div id="legalnotice">
-            <ul>
-                <li><a href="https://www.icann.org/privacy/policy">Privacy Policy</a></li>
-                <li><a href="https://www.icann.org/privacy/tos">Terms of Service</a></li>
-            </ul>
-        </div>
+        statusElement.className = `execution-status status-${status}`;
+        statusElement.textContent = status.charAt(0).toUpperCase() +
+          status.slice(1);
 
-    </div>
-</footer>
+        if (result) {
+          resultElement.textContent = typeof result === "object"
+            ? JSON.stringify(result, null, 2)
+            : result.toString();
+        }
+      }
 
+      async function runCode(code, name = "", options = {}) {
+        if (!code) return;
 
+        const executionItem = createExecutionItem(code, name);
 
-</body>
+        try {
+          progressBarFill.style.width = "30%";
 
+          const resolver = execInSandbox(code, {
+            interruptAfterDeadline: parseInt(timeoutInput.value),
+            maxInterrupts: parseInt(maxInterruptsInput.value),
+            ...options,
+          });
+
+          progressBarFill.style.width = "60%";
+
+          const result = await resolver;
+          progressBarFill.style.width = "100%";
+
+          updateExecutionStatus(executionItem, "success", result);
+        } catch (error) {
+          progressBarFill.style.width = "100%";
+          updateExecutionStatus(executionItem, "error", error.message || error);
+        } finally {
+          setTimeout(() => {
+            progressBarFill.style.width = "0%";
+          }, 500);
+        }
+      }
+
+      async function runAllScripts() {
+        runAllButton.disabled = true;
+        runButton.disabled = true;
+
+        for (const script of presetScripts) {
+          await runCode(script.code, script.name, script.options);
+        }
+
+        runAllButton.disabled = false;
+        runButton.disabled = false;
+      }
+
+      workerSlider.addEventListener("input", (e) => {
+        const count = parseInt(e.target.value);
+        workerCountDisplay.textContent = count;
+        setNumWorkers(count);
+        updateWorkerStatus();
+      });
+
+      updateWorkerStatus();
+
+      scriptSelect.addEventListener("change", () => {
+        const selectedScript = presetScripts[scriptSelect.value];
+        if (selectedScript) {
+          codeEditor.value = selectedScript.code;
+        }
+      });
+
+      runButton.addEventListener("click", () => {
+        const code = codeEditor.value.trim();
+        const selectedScript = presetScripts[scriptSelect.value];
+        runCode(code, selectedScript?.name);
+      });
+
+      runAllButton.addEventListener("click", runAllScripts);
+
+      clearButton.addEventListener("click", () => {
+        executionList.innerHTML = "";
+        executionCount = 0;
+      });
+
+      // Support Ctrl+Enter to run code
+      codeEditor.addEventListener("keydown", (e) => {
+        if (e.ctrlKey && e.key === "Enter") {
+          e.preventDefault();
+          runCode(codeEditor.value.trim());
+        }
+      });
+
+      // Add sample code to get started
+      codeEditor.value = `// Select a preset script or write your own
+const numbers = [1, 2, 3, 4, 5];
+const sum = numbers.reduce((a, b) => a + b, 0);
+console.log(\`Sum of numbers: \${sum}\`);
+sum;`;
+    </script>
+  </body>
 </html>
-`
-  }
-</script>

@@ -21,7 +21,7 @@ function parseScript(script) {
       isModule: false,
       parsed,
     };
-  } catch (e) {}
+  } catch (e) { }
   try {
     let parsed = acornParse(script, {
       ecmaVersion: 2022,
@@ -31,7 +31,7 @@ function parseScript(script) {
       isModule: true,
       parsed,
     };
-  } catch (e) {}
+  } catch (e) { }
 
   throw new Error("Unable to parse script");
 }
@@ -41,7 +41,7 @@ function getURL(string, base) {
 
   try {
     url = new URL(string, base);
-  } catch (_) {}
+  } catch (_) { }
 
   return url;
 }
@@ -175,7 +175,7 @@ async function getNewContextWithGlobals({
   `);
 
   prepareVM(vm);
-  
+
   // This doesn't work yet:
   // const setTimeoutHandle = vm.newFunction(
   //   "setTimeout",
@@ -219,7 +219,7 @@ export async function execInSandbox(code, options = {}) {
   const verbose = options.verbose || false;
   const entrypoint = options.entrypoint || false;
   const header = options.header || "";
-  const prepareVM = options.prepareVM || function() {};
+  const prepareVM = options.prepareVM || function () { };
   let allowFileModuleLoads = options.allowFileModuleLoads || false;
   let allowRemoteModuleLoads = true;
   if (typeof options.allowRemoteModuleLoads !== "undefined") {

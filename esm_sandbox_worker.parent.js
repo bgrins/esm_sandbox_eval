@@ -1,79 +1,170 @@
-// Expose the same API to the parent and manage remoting to a worker instance
-let workers = [];
 
-function createWorker() {
-  let worker = new Worker("esm_sandbox_worker.bundle.js");
-  worker.onmessage = function (e) {
+export class WorkerPool {
+  constructor() {
+    this.workers = [];
+    this.activeWorkers = new Map(); // worker -> resolver
+    this.taskQueue = [];
+    this.messageResolvers = new Map();
+    this.messageID = 1;
+  }
+
+  createWorker() {
+    const worker = new Worker("esm_sandbox_worker.bundle.js");
+    worker.onmessage = (e) => this.handleWorkerMessage(worker, e);
+    return worker;
+  }
+
+  handleWorkerMessage(worker, e) {
     console.log(e.data);
-    let resolver = messageResolvers.get(e.data.id);
+    const resolver = this.messageResolvers.get(e.data.id);
     if (!resolver) {
       throw new Error("No resolver for message " + JSON.stringify(e.data));
     }
+
     resolver.dispatchEvent(
       new CustomEvent(e.data.type, { detail: e.data.detail })
     );
-  };
-  return worker;
-}
-export function setNumWorkers(numWorkers) {
-  if (numWorkers < 1) {
-    throw new Error("numWorkers must be >= 1");
+
+    // Mark worker as available after task completion
+    this.activeWorkers.delete(worker);
+    this.processNextTask();
   }
-  if (numWorkers > workers.length) {
-    while (workers.length < numWorkers) {
-      workers.push(createWorker());
+
+  async processNextTask() {
+    if (this.taskQueue.length === 0) return;
+
+    const availableWorker = this.getIdleWorker();
+    if (!availableWorker) return; // No workers available
+
+    const task = this.taskQueue.shift();
+    this.executeTask(availableWorker, task);
+  }
+
+  getIdleWorker() {
+    // First try to find an inactive worker
+    for (const worker of this.workers) {
+      if (!this.activeWorkers.has(worker)) {
+        return worker;
+      }
     }
-  } else if (numWorkers < workers.length) {
-    // We'd have to make sure to not kill running jobs. Would need to do
-    // some testing to see if this multiple worker mechanism is even useful first.
-    throw new Error("Can't scale down workers yet")
-    // while (workers.length > numWorkers) {
-    //   workers.pop().terminate();
-    // }
+
+    // If we haven't reached max workers, create a new one
+    if (this.workers.length < this.maxWorkers) {
+      const worker = this.createWorker();
+      this.workers.push(worker);
+      return worker;
+    }
+
+    return null; // No idle workers available
+  }
+
+  executeTask(worker, task) {
+    const { resolver, message } = task;
+    this.activeWorkers.set(worker, resolver);
+    worker.postMessage(message);
+  }
+
+  setNumWorkers(numWorkers) {
+    if (numWorkers < 1) {
+      throw new Error("numWorkers must be >= 1");
+    }
+
+    this.maxWorkers = numWorkers;
+
+    // Scale up immediately if needed
+    while (this.workers.length < numWorkers) {
+      this.workers.push(this.createWorker());
+    }
+
+    // Scale down gracefully
+    if (numWorkers < this.workers.length) {
+      this.scaleDown(numWorkers);
+    }
+  }
+
+  async scaleDown(targetNum) {
+    // Mark excess workers for removal
+    const workersToRemove = this.workers.slice(targetNum);
+
+    // Wait for active tasks to complete on marked workers
+    await Promise.all(workersToRemove.map(worker => {
+      if (this.activeWorkers.has(worker)) {
+        return this.activeWorkers.get(worker).promise;
+      }
+      return Promise.resolve();
+    }));
+
+    // Remove and terminate excess workers
+    for (const worker of workersToRemove) {
+      const index = this.workers.indexOf(worker);
+      if (index !== -1) {
+        this.workers.splice(index, 1);
+        worker.terminate();
+      }
+    }
   }
 }
 
-let messageID = 1;
-let messageResolvers = new Map();
-
-setNumWorkers(1);
-
-class MessageResolver extends EventTarget {
+export class MessageResolver extends EventTarget {
   constructor() {
     super();
-    this.messageID = messageID++;
+    this.messageID = workerPool.messageID++;
     this.promise = new Promise((resolve, reject) => {
       this.resolve = resolve;
       this.reject = reject;
     });
+
     this.addEventListener("execInSandboxComplete", (e) => {
-      console.log(e);
+      // console.log(e);
       this.resolve(e.detail);
-      messageResolvers.delete(this.messageID);
+      workerPool.messageResolvers.delete(this.messageID);
     });
+
     this.addEventListener("execInSandboxError", (e) => {
       this.reject(e.detail);
-      messageResolvers.delete(this.messageID);
+      workerPool.messageResolvers.delete(this.messageID);
     });
   }
 }
 
+// Create singleton worker pool
+export const workerPool = new WorkerPool();
 
-export async function execInSandboxToResolver(code, options = {}) {
-  let resolver = new MessageResolver();
-  let message = {
+// Export functions with improved worker management
+export function setNumWorkers(numWorkers) {
+  workerPool.setNumWorkers(numWorkers);
+}
+
+export function execInSandboxToResolver(code, options = {}) {
+  if (!workerPool.workers.length) {
+    console.log("Creating initial worker");
+    setNumWorkers(1);
+  }
+
+  const resolver = new MessageResolver();
+  const message = {
     type: "execInSandbox",
     id: resolver.messageID,
     code,
     options,
   };
 
-  let worker = workers[resolver.messageID % workers.length];
-  worker.postMessage(message);
-  messageResolvers.set(resolver.messageID, resolver);
+  workerPool.messageResolvers.set(resolver.messageID, resolver);
+
+  // Try to get an idle worker
+  const idleWorker = workerPool.getIdleWorker();
+  if (idleWorker) {
+    // Execute immediately if worker is available
+    workerPool.executeTask(idleWorker, { resolver, message });
+  } else {
+    // Queue the task if no workers are available
+    workerPool.taskQueue.push({ resolver, message });
+  }
+
   return resolver;
 }
+
 export async function execInSandbox(code, options = {}) {
-  let { promise } = await execInSandboxToResolver(code, options);
+  const { promise } = await execInSandboxToResolver(code, options);
   return await promise;
 }
