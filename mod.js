@@ -1,5 +1,5 @@
 import quickjs from "./build/quickjs-module.js";
-import { parse as acornParse } from "https://esm.sh/acorn@8.7.1";
+import { parse as acornParse } from "https://esm.sh/acorn@8.14.0";
 export { quickjs };
 
 const MEMORY_LIMIT = 1024 * 1024 * 32;

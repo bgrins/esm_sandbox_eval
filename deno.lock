@@ -115,7 +115,9 @@
     "https://deno.land/x/emit@0.28.0/mod.ts": "817cb45fcd94d15a43de826161049eee89e3be4bcf06b3a2f60e8cf459e559f1",
     "https://deno.land/x/wasmbuild@0.14.1/cache.ts": "89eea5f3ce6035a1164b3e655c95f21300498920575ade23161421f5b01967f4",
     "https://deno.land/x/wasmbuild@0.14.1/loader.ts": "d98d195a715f823151cbc8baa3f32127337628379a02d9eb2a3c5902dbccfc02",
+    "https://esm.sh/acorn@8.14.0": "d410de6ee62ce0aa6747c157bec8b04933110be6c2492d028b38e5c3e0b6ddb0",
     "https://esm.sh/acorn@8.7.1": "aa57108a555c3ce983c7b7688873f3107e5bad45f8c2a2647b30e655ca85d88c",
+    "https://esm.sh/v135/acorn@8.14.0/denonext/acorn.mjs": "8c79b214d8ea549d7add8966e4ba57496cef3a2fd0be6fc7ecfd0b037470fc2a",
     "https://esm.sh/v135/acorn@8.7.1/denonext/acorn.mjs": "dc6c950781ecfe813cb67041a1ee4e8cc04891f556daddb4807d12a65252ae95"
   }
 }
