@@ -80,6 +80,53 @@ Deno.test("basics", async () => {
     4
   );
 
+  assertEquals(
+    await execInSandbox(
+      `
+    import { z } from "https://esm.sh/zod@3.24.2";
+    export default {
+      "test-zod": {
+        a: z.number(),
+        b: z.string()
+      }
+    }
+    `,
+      {
+        exposed: {
+          input: {},
+        },
+        importMap: {},
+      }
+    ),
+
+    {
+      "test-zod": {
+        a: {
+          "~standard": {
+            vendor: "zod",
+            version: 1,
+          },
+          _def: {
+            checks: [],
+            coerce: false,
+            typeName: "ZodNumber",
+          },
+        },
+        b: {
+          "~standard": {
+            vendor: "zod",
+            version: 1,
+          },
+          _def: {
+            checks: [],
+            coerce: false,
+            typeName: "ZodString",
+          },
+        },
+      },
+    }
+  );
+
   let threw = false;
   try {
     await execInSandbox("invalid syntax");

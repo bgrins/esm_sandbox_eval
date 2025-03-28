@@ -272,12 +272,17 @@ export async function execInSandbox(code, options = {}) {
 
   importMap["eval-module.js"] = code;
   if (isModule) {
+    console.log(entrypoint, "isModule", isModule);
     if (entrypoint) {
       code = `
       import {${entrypoint}} from "eval-module.js";
       (async() => {
         try {
-          globalThis.__result = await ${entrypoint}(__exposed);
+          if (typeof ${entrypoint} === 'function') {
+            globalThis.__result = await ${entrypoint}(__exposed);
+          } else {
+            globalThis.__result = ${entrypoint};
+          }
         } catch(error) {
           globalThis.__error = error;
         }
@@ -288,7 +293,11 @@ export async function execInSandbox(code, options = {}) {
       import mod from "eval-module.js";
       (async() => {
         try {
-          globalThis.__result = await mod(__exposed);
+          if (typeof mod === 'function') {
+            globalThis.__result = await mod(__exposed);
+          } else {
+            globalThis.__result = mod;
+          }
         } catch(error) {
           globalThis.__error = error;
         }
